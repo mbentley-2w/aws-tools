@@ -178,8 +178,41 @@ def propagate_tag(instances, tag_key, dry_run):
 # Main
 #
 
-parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
-                                 description="Propagate EC2 Tags to associated EBS volumes and snapshots")
+help_description = '''
+Propagate a single EC2 Instance Tag to associated EBS Volumes and Snapshots
+
+If --profile is not specified, the AWS_PROFILE environment variable will be used.
+
+If --region is not specified, it will default to "us-east-1"
+
+---------------------------------------------------------------------------
+Examples:
+    
+    Report on the status of tag with key "AppName"
+
+        ./propagate-tags.py --report --tag AppName:
+
+    Report on the status of tag with key "AppName" limited to a specific VPC
+
+        ./propagate-tags.py --report --tag AppName --vpc vpc-3d4b2c5ap
+
+    Report on the status of tag with key "AppName" limited to a Instance ID:
+
+        ./propagate-tags.py --report --tag AppName --instance i-0695b7d08f0dbb351
+
+    Propagate the instance tag key and value to all associated volumes and snapshots:
+
+        ./propagate-tags.py --propagate --tag AppName
+        
+    A "Dry Run" will show what would be done, but not actually do it:
+
+        ./propagate-tags.py --propagate --tag AppName --dry-run
+        
+---------------------------------------------------------------------------
+
+'''
+
+parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter, description=help_description)
 
 parser.add_argument(
     '--profile',
@@ -292,8 +325,12 @@ try:
     elif propagate:
         propagate_tag(instances, tag_key, dry_run)
 
+except KeyboardInterrupt:
+    print(f"\nHow wewd!")
+    raise SystemExit
+
 except botocore.exceptions.ClientError as e:
-    print(f"ERROR: Something went wrong: {e}")
+    print(f"\nERROR: {e}")
     raise SystemExit
 
 
