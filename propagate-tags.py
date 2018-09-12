@@ -232,13 +232,15 @@ propagate = args.propagate
 tag_key = args.tag
 
 if report and propagate:
-    print(f"\nCannot specify both --report and --propagate at the same time!\n")
-    parser.print_help(sys.stderr)
+    print(f"\nCannot specify both --report and --propagate at the same time!  Use --help to show full usage info.\n")
     raise SystemExit
 
 if not (report or propagate):
-    print(f"\nMust specify either --report or --propagate !\n")
-    parser.print_help(sys.stderr)
+    print(f"\nMust specify either --report or --propagate options!  Use --help to show full usage info.\n")
+    raise SystemExit
+
+if not tag_key:
+    print(f"\nMust specify --tag <tag key> to report on or propagate!  Use --help to show full usage info.\n")
     raise SystemExit
 
 if not region:
