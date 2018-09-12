@@ -30,29 +30,17 @@ def search_for_tag(list_of_dicts, search_tag):
 
 def set_tag(resource, key, value):
     """ set EBS volume or snapshot tag key to value """
-    #print(f"DEBUG: Setting tag '{key}' to '{value}'")
+    # print(f"DEBUG: Setting tag '{key}' to '{value}'")
     resource.create_tags(Tags=[{'Key': str(key), 'Value': str(value)}])
 
 
-def volume_tag_match(instance, volume, tag_key):
-    """ given volume and tag, check if the instance tag value matches the volume tag value """
+def tag_match(instance, resource, tag_key):
+    """ given volume or snapshot resource, check if the instance tag value matches that resource's tag value """
+
     instance_tag_value = search_for_tag(instance.tags, tag_key)
-    volume_tag_value = search_for_tag(volume.tags, tag_key)
-    #print(f"DEBUG: instance_tag_value={instance_tag_value}/{type(instance_tag_value)} volume_tag_value={volume_tag_value}/{type(volume_tag_value)}")
+    resource_tag_value = search_for_tag(resource.tags, tag_key)
 
-    if instance_tag_value == volume_tag_value:
-        return True
-    else:
-        return False
-
-
-def snapshot_tag_match(instance, snapshot, tag_key):
-    """ given snapshot and tag, check if the instance tag value matches the snapshot tag value """
-    instance_tag_value = search_for_tag(instance.tags, tag_key)
-    snapshot_tag_value = search_for_tag(snapshot.tags, tag_key)
-    #print(f"DEBUG: instance_tag_value={instance_tag_value}/{type(instance_tag_value)} snapshot_tag_value={snapshot_tag_value}/{type(snapshot_tag_value)}")
-
-    if instance_tag_value == snapshot_tag_value:
+    if instance_tag_value == resource_tag_value:
         return True
     else:
         return False
@@ -60,7 +48,7 @@ def snapshot_tag_match(instance, snapshot, tag_key):
 
 def print_volume_tag_status(instance, volume, tag_key):
     if search_for_tag(instance.tags, tag_key):
-        if volume_tag_match(instance, volume, tag_key):
+        if tag_match(instance, volume, tag_key):
             tag_status = 'Match'
         else:
             tag_status = 'Differs'
@@ -72,7 +60,7 @@ def print_volume_tag_status(instance, volume, tag_key):
 
 def print_snapshot_tag_status(instance, volume, snapshot, tag_key):
     if search_for_tag(instance.tags, tag_key):
-        if snapshot_tag_match(instance, snapshot, tag_key):
+        if tag_match(instance, snapshot, tag_key):
             tag_status = 'Match'
         else:
             tag_status = 'Differs'
@@ -97,7 +85,7 @@ def print_report(instances, tag_key):
 
 
 def propagate_tag_to_volume(instance, volume, tag_key, dry_run):
-    if volume_tag_match(instance, volume, tag_key):
+    if tag_match(instance, volume, tag_key):
         tag_status = 'Already Matches'
     else:
         old_tag_value = search_for_tag(volume.tags, tag_key) or 'None'
@@ -111,7 +99,7 @@ def propagate_tag_to_volume(instance, volume, tag_key, dry_run):
 
 
 def propagate_tag_to_snapshot(instance, volume, snapshot, tag_key, dry_run):
-    if snapshot_tag_match(instance, snapshot, tag_key):
+    if tag_match(instance, snapshot, tag_key):
         tag_status = 'Already Matches'
     else:
         old_tag_value = search_for_tag(snapshot.tags, tag_key) or 'None'
@@ -269,7 +257,7 @@ except:
     raise SystemExit
 
 
-filters=[]
+filters = []
 
 filters.append({'Name': 'instance-state-name', 'Values': ['running', 'stopped']})
 
@@ -300,5 +288,4 @@ except KeyboardInterrupt:
 except botocore.exceptions.ClientError as e:
     print(f"\nERROR: {e}")
     raise SystemExit
-
 
