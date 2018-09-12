@@ -2,17 +2,43 @@
 #
 # TODO:  need to be able to propagate tags to EBS snapshots as well
 #
-# Example:
+# Examples:
 #
-#     ./propagate-tags.py --profile ProsightMainAdmin --region us-east-1 --propagate-tags AppName,BusinessApp
-#     ./propagate-tags.py --profile ProsightMainAdmin --region us-east-1 --propagate-tags AppName,BusinessApp --instance i-0695b7d08f0dbb351
-#     ./propagate-tags.py --profile ProsightMainAdmin --region us-east-1 --propagate-tags AppName,BusinessApp --instance i-0695b7d08f0dbb351 --dry-run
-
+#     Report on the status of a tag
+#
+#         ./propagate-tags.py --region us-west-2 --report    --tag AppName
+#
+#     Report on the status of a tag limited to a specific VPC
+#
+#         ./propagate-tags.py --region us-east-1 --report    --tag AppName --vpc vpc-3d4b2c5ayyp
+#
+#     Report on the status of a tag limited to a specific Instance ID
+#
+#         ./propagate-tags.py --region us-east-1 --report    --tag AppName --instance i-0695b7d08f0dbb351
+#
+#     Propagate a tag Dry-Run
+#
+#         ./propagate-tags.py --region us-east-1 --propagate --tag AppName --dry-run
+#
+#     Propagate tag for real
+#
+#         ./propagate-tags.py --region us-east-1 --propagate --tag AppName
 
 import sys
 import argparse
 import boto3
 import botocore.exceptions
+
+TAB_SIZE = 3
+
+#
+# Helper Functions
+#
+
+def tab_print(level, string):
+    """ print a string with certain indentation level using global TAB_SIZE """
+    indent_spaces = ' ' * int(level) * int(TAB_SIZE)
+    print("{}{}".format(indent_spaces, string))
 
 
 def key_defined_and_not_none(this_key, this_dict):
@@ -34,37 +60,197 @@ def search_for_tag(list_of_dicts, search_tag):
         return None
 
 
-def set_ebs_tag(volume, key, value):
-    """ set tag on EBS volume to key=value """
-    print(f"DEBUG: Setting tag '{key}' to '{value}'")
-    volume.create_tags(Tags=[{'Key': str(key), 'Value': str(value)}])
+def set_tag(resource, key, value):
+    """ set EBS volume or snapshot tag key to value """
+    #print(f"DEBUG: Setting tag '{key}' to '{value}'")
+    resource.create_tags(Tags=[{'Key': str(key), 'Value': str(value)}])
 
+
+def volume_tag_match(instance, volume, tag_key):
+    """ given volume and tag, check if the instance tag value matches the volume tag value """
+    instance_tag_value = search_for_tag(instance.tags, tag_key)
+    volume_tag_value = search_for_tag(volume.tags, tag_key)
+    #print(f"DEBUG: instance_tag_value={instance_tag_value}/{type(instance_tag_value)} volume_tag_value={volume_tag_value}/{type(volume_tag_value)}")
+
+    if instance_tag_value == volume_tag_value:
+        return True
+    else:
+        return False
+
+
+def snapshot_tag_match(instance, snapshot, tag_key):
+    """ given snapshot and tag, check if the instance tag value matches the snapshot tag value """
+    instance_tag_value = search_for_tag(instance.tags, tag_key)
+    snapshot_tag_value = search_for_tag(snapshot.tags, tag_key)
+    #print(f"DEBUG: instance_tag_value={instance_tag_value}/{type(instance_tag_value)} snapshot_tag_value={snapshot_tag_value}/{type(snapshot_tag_value)}")
+
+    if instance_tag_value == snapshot_tag_value:
+        return True
+    else:
+        return False
+
+
+def print_volume_tag_status(instance, volume, tag_key):
+    if search_for_tag(instance.tags, tag_key):
+        if volume_tag_match(instance, volume, tag_key):
+            tag_status = 'Match'
+        else:
+            tag_status = 'Differs'
+    else:
+        # Given tag_key not defined for the instance
+        tag_status = 'Missing on Instance'
+    print(f"{instance.id}  {volume.id}                          {tag_status}")
+
+
+def print_snapshot_tag_status(instance, volume, snapshot, tag_key):
+    if search_for_tag(instance.tags, tag_key):
+        if snapshot_tag_match(instance, snapshot, tag_key):
+            tag_status = 'Match'
+        else:
+            tag_status = 'Differs'
+    else:
+        # Given tag_key not defined for the instance
+        tag_status = 'Missing on Instance'
+    print(f"{instance.id}  {volume.id}  {snapshot.id}  {tag_status}")
+
+
+def print_report(instances, tag_key):
+    print(f"-------------------  ---------------------  ----------------------  -------------------")
+    print(f"Instance             Volume                 Snapshot                Tag Status")
+    print(f"-------------------  ---------------------  ----------------------  -------------------")
+    for i in instances:
+        volumes = i.volumes.all()
+        for v in volumes:
+            print_volume_tag_status(i, v, tag_key)
+            snapshots = v.snapshots.all()
+            for ss in snapshots:
+                print_snapshot_tag_status(i, v, ss, tag_key)
+        print(f"-------------------  ---------------------  ----------------------  -------------------")
+
+
+def propagate_tag_to_volume(instance, volume, tag_key, dry_run):
+    if volume_tag_match(instance, volume, tag_key):
+        tag_status = 'Already Matches'
+    else:
+        old_tag_value = search_for_tag(volume.tags, tag_key) or 'None'
+        new_tag_value = search_for_tag(instance.tags, tag_key)
+        if dry_run:
+            tag_status = f"Differs - Would Update ({old_tag_value} --> {new_tag_value})"
+        else:
+            tag_status = f"Differs - Updating ({old_tag_value} --> {new_tag_value})"
+            set_tag(volume, tag_key, new_tag_value)
+    print(f"{instance.id}  {volume.id}                          {tag_status}")
+
+
+def propagate_tag_to_snapshot(instance, volume, snapshot, tag_key, dry_run):
+    if snapshot_tag_match(instance, snapshot, tag_key):
+        tag_status = 'Already Matches'
+    else:
+        old_tag_value = search_for_tag(snapshot.tags, tag_key) or 'None'
+        new_tag_value = search_for_tag(instance.tags, tag_key)
+        if dry_run:
+            tag_status = f"Differs - Would Update ({old_tag_value} --> {new_tag_value})"
+        else:
+            tag_status = f"Differs - Updating ({old_tag_value} --> {new_tag_value})"
+            set_tag(snapshot, tag_key, new_tag_value)
+    print(f"{instance.id}  {volume.id}  {snapshot.id}  {tag_status}")
+
+
+def propagate_tag(instances, tag_key, dry_run):
+    print(f"-------------------  ---------------------  ----------------------  -------------------")
+    print(f"Instance             Volume                 Snapshot                Tag Status")
+    print(f"-------------------  ---------------------  ----------------------  -------------------")
+    for instance in instances:
+        # If the tag_key is defined on the instance, we propagate it to all volumes and snapshots
+        if search_for_tag(instance.tags, tag_key):
+            volumes = instance.volumes.all()
+            for volume in volumes:
+                propagate_tag_to_volume(instance, volume, tag_key, dry_run)
+                snapshots = volume.snapshots.all()
+                for snapshot in snapshots:
+                    propagate_tag_to_snapshot(instance, volume, snapshot, tag_key, dry_run)
+        else:
+            print(f"{instance.id}  --> Tag key '{tag_key}' not defined or has no value.  Skipping.")
+        print(f"-------------------  ---------------------  ----------------------  -------------------")
+
+
+#
+# Main
+#
 
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                  description="Propagate EC2 Tags to associated EBS volumes and snapshots")
 
-parser.add_argument('--profile', help='AWS Profile to use from ~/.aws/credentials')
-parser.add_argument('--region', help='AWS Region (e.g. us-east-1)')
-parser.add_argument('--vpc', help='Limit to specific VPC (e.g. vpc-51400a36)')
-parser.add_argument('--instance', help='Limit to specific Instance ID (e.g. i-00248125391db0f4b)')
-parser.add_argument('--tag-key', help='Limit to instances with specific tag key set (e.g. "AppName")')
-parser.add_argument('--propagate-tags', help='Propagate EC2 tag(s) to EBS volumes and snapshots (comma-separated list, no whitespace)')
+parser.add_argument(
+    '--profile',
+    help='AWS Profile to use from ~/.aws/credentials')
 
-parser.add_argument('--dry-run', action='store_true', help='Show what would be done, but dont do it.')
+parser.add_argument(
+    '--region',
+    help='AWS Region ID (e.g. us-east-1)')
+
+parser.add_argument(
+    '--vpc',
+    help='Limit to specific VPC ID (e.g. vpc-51400a36)')
+
+parser.add_argument(
+    '--instance',
+    help='Limit to specific Instance ID (e.g. i-00248125391db0f4b)')
+
+parser.add_argument(
+    '--tag-key',
+    help='Limit to instances with specific tag key defined, regardless of its value (e.g. "AppName")')
+
+parser.add_argument(
+    '--tag',
+    help='The tag to report on or propagate (required with --report or --propagate)')
+
+parser.add_argument(
+    '--report',
+    action='store_true',
+    help='Print a report of the current state of given tag (--tag required)')
+
+parser.add_argument(
+    '--propagate',
+    action='store_true',
+    help='Propagate given EC2 tag to EBS volumes and snapshots (--tag required)')
+
+parser.add_argument(
+    '--dry-run',
+    action='store_true',
+    help='Show what would be done, but dont do it.')
+
+parser.set_defaults(report=False)
+parser.set_defaults(propagate=False)
 parser.set_defaults(dry_run=False)
 
+if len(sys.argv) == 1:
+    parser.print_help(sys.stderr)
+    raise SystemExit
+
 args = parser.parse_args()
+
 profile = args.profile
 region = args.region
-vpc_id = args.vpc
-instance_id = args.instance
-tag_key = args.tag_key
-dry_run = args.dry_run
 
-if args.propagate_tags:
-    propagate_tags = args.propagate_tags.split(",")
-else:
-    propagate_tags = None
+limit_vpc_id = args.vpc
+limit_instance_id = args.instance
+limit_tag_key = args.tag_key
+
+dry_run = args.dry_run
+report = args.report
+propagate = args.propagate
+tag_key = args.tag
+
+if report and propagate:
+    print(f"\nCannot specify both --report and --propagate at the same time!\n")
+    parser.print_help(sys.stderr)
+    raise SystemExit
+
+if not (report or propagate):
+    print(f"\nMust specify either --report or --propagate !\n")
+    parser.print_help(sys.stderr)
+    raise SystemExit
 
 if not region:
     region = 'us-east-1'
@@ -73,7 +259,6 @@ try:
     # If profile is specified, we use it rather than AWS_PROFILE
     if profile:
         boto3.setup_default_session(profile_name=profile)
-    #ec2 = boto3.client('ec2', region_name=region)
     ec2 = boto3.resource('ec2', region_name=region)
 except botocore.exceptions.ProfileNotFound as e:
     print(f"ERROR: Profile {profile} not found in your ~/.aws/credentials file")
@@ -87,65 +272,28 @@ filters=[]
 
 filters.append({'Name': 'instance-state-name', 'Values': ['running', 'stopped']})
 
-if vpc_id:
-    filters.append({'Name': 'vpc-id', 'Values': [vpc_id]})
+if limit_vpc_id:
+    filters.append({'Name': 'vpc-id', 'Values': [limit_vpc_id]})
 
-if instance_id:
-    filters.append({'Name': 'instance-id', 'Values': [instance_id]})
+if limit_instance_id:
+    filters.append({'Name': 'instance-id', 'Values': [limit_instance_id]})
 
-if tag_key:
-    filters.append({'Name': 'tag-key', 'Values': [tag_key]})
+if limit_tag_key:
+    filters.append({'Name': 'tag-key', 'Values': [limit_tag_key]})
 
-instances = ec2.instances.filter(Filters=filters)
+instances = []
 
-for i in instances:
-    name_tag = search_for_tag(i.tags, 'Name')
+try:
+    instances = ec2.instances.filter(Filters=filters)
 
-    instance_tag_value = {}
+    if report:
+        print_report(instances, tag_key)
 
-    if propagate_tags:
-        for tag_key in propagate_tags:
-            instance_tag_value[tag_key] = search_for_tag(i.tags, tag_key)
+    elif propagate:
+        propagate_tag(instances, tag_key, dry_run)
 
-    # at this point, the instance_tag_value dict should contain all of the values
-    # for each tag that we want to propagate.
+except botocore.exceptions.ClientError as e:
+    print(f"ERROR: Something went wrong: {e}")
+    raise SystemExit
 
-    print(f"\n{i.id} {name_tag}")
-    print(f"     Tag Values: {instance_tag_value}")
-
-    #for tag_idx, tag in enumerate(i.tags):
-    #    tag_key = i.tags[tag_idx]['Key']
-    #    tag_val = i.tags[tag_idx]['Value']
-    #    print(f"          [{tag_idx}] {tag_key} = {tag_val}")
-
-    print(f"     EBS Volumes:")
-    for v in i.volumes.all():
-        print(f"          {v.id} ")
-        volume_tag_value = {}
-        if v.tags:
-            # Tags were found on this volume, so lets get the values for each that we want to propagate
-            # so that we can do a comparison and print out what we find.
-            if propagate_tags:
-                for tag_key in propagate_tags:
-                    tag_value = search_for_tag(v.tags, tag_key)
-                    if tag_value:
-                        volume_tag_value[tag_key] = tag_value
-                        if instance_tag_value[tag_key] == volume_tag_value[tag_key]:
-                            print(f"               Tag '{tag_key}' found and matches instance.")
-                        else:
-                            print(f"               Tag '{tag_key}' found, but DOES NOT MATCH. <-----------------------")
-                            if not dry_run:
-                                set_ebs_tag(v, tag_key, instance_tag_value[tag_key])
-
-                    else:
-                        print(f"               Tag '{tag_key}' NOT found for volume. <-----------------------")
-                        if not dry_run:
-                            set_ebs_tag(v, tag_key, instance_tag_value[tag_key])
-        else:
-            # No tags defined for this volume
-            print(f"               No Tags Found. <-----------------------")
-            if propagate_tags:
-                for tag_key in propagate_tags:
-                    if not dry_run:
-                        set_ebs_tag(v, tag_key, instance_tag_value[tag_key])
 
