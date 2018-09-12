@@ -1,45 +1,13 @@
 #!/usr/bin/env python
-#
-# TODO:  need to be able to propagate tags to EBS snapshots as well
-#
-# Examples:
-#
-#     Report on the status of a tag
-#
-#         ./propagate-tags.py --region us-west-2 --report    --tag AppName
-#
-#     Report on the status of a tag limited to a specific VPC
-#
-#         ./propagate-tags.py --region us-east-1 --report    --tag AppName --vpc vpc-3d4b2c5ayyp
-#
-#     Report on the status of a tag limited to a specific Instance ID
-#
-#         ./propagate-tags.py --region us-east-1 --report    --tag AppName --instance i-0695b7d08f0dbb351
-#
-#     Propagate a tag Dry-Run
-#
-#         ./propagate-tags.py --region us-east-1 --propagate --tag AppName --dry-run
-#
-#     Propagate tag for real
-#
-#         ./propagate-tags.py --region us-east-1 --propagate --tag AppName
 
 import sys
 import argparse
 import boto3
 import botocore.exceptions
 
-TAB_SIZE = 3
-
 #
 # Helper Functions
 #
-
-def tab_print(level, string):
-    """ print a string with certain indentation level using global TAB_SIZE """
-    indent_spaces = ' ' * int(level) * int(TAB_SIZE)
-    print("{}{}".format(indent_spaces, string))
-
 
 def key_defined_and_not_none(this_key, this_dict):
     """ Check if key is defined within dictionary, and not None (null) """
