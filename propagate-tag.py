@@ -143,10 +143,10 @@ If --region is not specified, it will default to "us-east-1"
 
 ---------------------------------------------------------------------------
 Examples:
-    
+
     Report on the status of tag with key "AppName"
 
-        ./propagate-tags.py --report --tag AppName:
+        ./propagate-tags.py --report --tag AppName
 
     Report on the status of tag with key "AppName" limited to a specific VPC
 
@@ -159,11 +159,11 @@ Examples:
     Propagate the instance tag key and value to all associated volumes and snapshots:
 
         ./propagate-tags.py --propagate --tag AppName
-        
+
     A "Dry Run" will show what would be done, but not actually do it:
 
         ./propagate-tags.py --propagate --tag AppName --dry-run
-        
+
 ---------------------------------------------------------------------------
 
 '''
