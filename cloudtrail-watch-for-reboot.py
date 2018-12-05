@@ -26,7 +26,7 @@
 #                 "s3:GetObject"
 #             ],
 #             "Resource": [
-#                 "<CloudTrail log bucket ARN>"
+#                 "<CloudTrail log bucket ARN>/*"
 #             ]
 #         },
 #         {
