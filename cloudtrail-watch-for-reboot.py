@@ -3,6 +3,44 @@
 #     SID 341: Using AWS CloudTrail Logs for Scalable, Automated Anomaly Detection
 #     https://github.com/aws-samples/aws-cloudtrail-analyzer-workshop
 #
+# Requires IAM Permissions:
+#
+# {
+#     "Version": "2012-10-17",
+#     "Statement": [
+#         {
+#             "Effect": "Allow",
+#             "Action": "ec2:Describe*",
+#             "Resource": "*"
+#         },
+#         {
+#             "Effect": "Allow",
+#             "Action": [
+#                 "logs:*"
+#             ],
+#             "Resource": "arn:aws:logs:*:*:*"
+#         },
+#         {
+#             "Effect": "Allow",
+#             "Action": [
+#                 "s3:GetObject"
+#             ],
+#             "Resource": [
+#                 "<CloudTrail log bucket ARN>"
+#             ]
+#         },
+#         {
+#             "Effect": "Allow",
+#             "Action": [
+#                 "sns:Publish"
+#             ],
+#             "Resource": [
+#                 "<SNS Topic ARN>"
+#             ]
+#         }
+#     ]
+# }
+
 
 import io
 import gzip
@@ -190,7 +228,7 @@ def main(event=None):
 
 
 def lambda_handler(event, context):
-    main(event)
+    main(event=event)
 
 
 if __name__ == '__main__':
